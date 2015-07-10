@@ -145,7 +145,8 @@ namespace ChatAssistant
                     }
                 }
             }
-            catch (Exception ex) { Log.ConsoleError(ex.ToString()); }
+            catch (Exception ex) { TShock.Log.ConsoleError(ex.ToString()); }
+  
         }
         public void Select()
         {
@@ -194,7 +195,7 @@ namespace ChatAssistant
                     return player.Menu;
                 }
             }
-            catch (Exception ex) { Log.ConsoleError(ex.ToString()); }
+            catch (Exception ex) { TShock.Log.ConsoleError(ex.ToString()); }
             return null;
         }
         public static void DisplayMainMenu(CAPlayer player)

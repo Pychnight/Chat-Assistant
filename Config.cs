@@ -13,17 +13,33 @@ namespace ChatAssistant
         public bool FilterJoinQuitByDefault = false;
         public bool EnableDeathMsgFilter = true;
         public bool FilterDeathMsgByDefault = false;
-        public bool UsingVault = false;
-        public int ChanelCreatingCost = 10000;
+        public bool UsingSeconomy = false;
+        public long cost { get; set; }
+        //public channelcost(string text)
+       // {
+       // this.cost = 0L;
+       // }
 
-   /*     [JsonConstructor]
-        public CAconfig(bool joinquitfilter, bool deathmsgfilter, bool joinquitdefault, bool deathmsgdefault)
+        long parseCost(string arg)
         {
-            this.EnableJoinQuitFilter = joinquitfilter;
-            this.EnableDeathMsgFilter = deathmsgfilter;
-            this.FilterDeathMsgByDefault = deathmsgdefault;
-            this.FilterJoinQuitByDefault = joinquitdefault;
-        }*/
+            try
+            {
+                Wolfje.Plugins.SEconomy.Money cost;
+                if (!Wolfje.Plugins.SEconomy.Money.TryParse(arg, out cost))
+                    return 0L;
+                return cost;
+            }
+            catch { return 0L; }
+        }
+
+        /*     [JsonConstructor]
+             public CAconfig(bool joinquitfilter, bool deathmsgfilter, bool joinquitdefault, bool deathmsgdefault)
+             {
+                 this.EnableJoinQuitFilter = joinquitfilter;
+                 this.EnableDeathMsgFilter = deathmsgfilter;
+                 this.FilterDeathMsgByDefault = deathmsgdefault;
+                 this.FilterJoinQuitByDefault = joinquitdefault;
+             }*/
         // -------------------------------  Static save/load methods -----------------------
         public static CAconfig Load()
         {
@@ -50,7 +66,7 @@ namespace ChatAssistant
             }
             catch (Exception ex)
             {
-                TShockAPI.Log.ConsoleError(ex.ToString());
+                //TShockAPI.ILog.ConsoleError(ex.ToString());
                 return new CAconfig();
             }
             if (returnconf == null)
@@ -72,8 +88,9 @@ namespace ChatAssistant
             }
             catch (Exception ex)
             {
-                TShockAPI.Log.ConsoleError(ex.ToString());
+                // TShockAPI.Log.ConsoleError(ex.ToString());
             }
         }
+
     }
 }

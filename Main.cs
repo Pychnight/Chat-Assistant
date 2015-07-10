@@ -6,16 +6,18 @@ using System.Text;
 using System.Data;
 using System.ComponentModel;
 using Terraria;
-using Hooks;
+using TShockAPI.Hooks;
 using TShockAPI;
 using TShockAPI.DB;
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
+using TerrariaApi.Server;
+using Wolfje.Plugins.SEconomy;
 
 namespace ChatAssistant
 {
-    [APIVersion(1, 12)]
+    [ApiVersion(1, 19)]
     public class CAMain : TerrariaPlugin
     {        
 
@@ -93,11 +95,19 @@ namespace ChatAssistant
         }
         public override void Initialize()
         {
-            NetHooks.GetData += GetData;
-            NetHooks.SendData += SendData;
-            ServerHooks.Join += OnJoin;
-            ServerHooks.Leave += OnLeave;
-            ServerHooks.Chat += OnChat;
+            //NetHooks.GetData += GetData;
+            //NetHooks.SendData += SendData;
+            //ServerHooks.Join += OnJoin;
+            //ServerHooks.Leave += OnLeave;
+            //ServerHooks.Chat += OnChat;
+            //
+            ServerApi.Hooks.NetGetData.Register(this, GetData);
+            ServerApi.Hooks.NetSendData.Register(this, SendData);
+            ServerApi.Hooks.ServerJoin.Register(this, OnJoin);
+            ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
+            ServerApi.Hooks.ServerChat.Register(this, OnChat);
+           
+            
             Commands.ChatCommands.Add(new Command("CA.channel.cmd", ChannelCommand, "ch", "channel"));
             Commands.ChatCommands.Add(new Command("CA.ignore.cmd", IgnoreCommand, "ignore"));
 
@@ -134,71 +144,92 @@ namespace ChatAssistant
                 stream.Close();
             }
             config = CAconfig.Load();
-            if (!File.Exists(Path.Combine("ServerPlugins", "Vault.dll")))            
-                config.UsingVault = false;
+            if (!File.Exists(Path.Combine("ServerPlugins", "Wolfje.Plugins.SEconomy.dll")))            
+                config.UsingSeconomy = false;
              
         }
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                NetHooks.GetData -= GetData;
-                NetHooks.SendData -= SendData;
-                ServerHooks.Leave -= OnLeave;
-                ServerHooks.Join -= OnJoin;
-                ServerHooks.Chat -= OnChat;
+                ServerApi.Hooks.NetGetData.Deregister(this, GetData);
+                ServerApi.Hooks.NetSendData.Deregister(this, SendData);
+                ServerApi.Hooks.ServerJoin.Deregister(this, OnJoin);
+                ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
+                ServerApi.Hooks.ServerChat.Deregister(this, OnChat);
             }
             base.Dispose(disposing);
         }
-        private static void OnJoin(int who, HandledEventArgs args)
-        {
-            try
-            {
-                lock (PlayerList)
-                {
-                    PlayerList[who] = new CAPlayer(who);
-                }
-                if (Channels[0] != null)
-                    Channels[0].JoinChannel(PlayerList[who]);
-            }
-            catch (Exception ex)
-            {
-                Log.ConsoleError(ex.ToString());
-            }
 
-        }
-        private static void OnLeave(int who)
+        private void OnJoin(JoinEventArgs args)
         {
+            PlayerList[args.Who] = new CAPlayer();
             try
             {
-                if (who >= 0 && PlayerList[who] != null)
+                if (PlayerList[args.Who] != null && args.Who >= 0)
                 {
                     lock (PlayerList)
                     {
-                        PlayerList[who].quitting = true;
-                        if (PlayerList[who].InMenu)
-                            PlayerList[who].Menu.Close(true);
-                        if (PlayerList[who].Channel >= 0)
+                        PlayerList[args.Who] = new CAPlayer(args.Who);
+                    }
+                    if (Channels[0] != null)
+                        Channels[0].JoinChannel(PlayerList[args.Who]);
+                }
+            }
+            catch (Exception ex)
+            {
+                TShock.Log.ConsoleError(ex.ToString());
+            }
+
+        }
+        private static void OnLeave(LeaveEventArgs args)
+        {
+            try
+            {
+                if (PlayerList[args.Who] != null && args.Who >= 0)
+                {
+                    lock (PlayerList)
+                    {
+                        PlayerList[args.Who].quitting = true;
+                        if (PlayerList[args.Who].InMenu)
+                            PlayerList[args.Who].Menu.Close(true);
+                        if (PlayerList[args.Who].Channel >= 0)
                         {
-                            var chan = Channels[PlayerList[who].Channel];
+                            var chan = Channels[PlayerList[args.Who].Channel];
                             if (chan != null)
-                                chan.LeaveChannel(PlayerList[who]);
+                                chan.LeaveChannel(PlayerList[args.Who]);
                         }
-                        PlayerList[who] = null;
+                        PlayerList[args.Who] = null;
                     }
                 }
             }
             catch (Exception ex)
             {
-                Log.ConsoleError(ex.ToString());
+                TShock.Log.ConsoleError(ex.ToString());
             }
         }
         void VaultChCreate(CAPlayer player, int chID, CommandArgs args)
         {
             try
             {
-                if (Vault.Vault.ModifyBalance(args.Player.Name, -config.ChanelCreatingCost))
+              
+                var economyPlayer = Wolfje.Plugins.SEconomy.SEconomyPlugin.Instance.GetBankAccount(player.Index);
+                var commandCost = new Wolfje.Plugins.SEconomy.Money(config.cost);
+                    
+                //Vault.Vault.ModifyBalance(args.Player.Name, -config.ChanelCreatingCost))
+                
+                if (!economyPlayer.IsAccountEnabled)
+				{
+					player.TSPlayer.SendErrorMessage("You cannot use this command because your account is disabled.");
+				}
+
+                else if (economyPlayer.Balance != null && economyPlayer.Balance >= config.cost)
                 {
+                    Wolfje.Plugins.SEconomy.Journal.BankTransferEventArgs trans = economyPlayer.TransferTo(
+                    Wolfje.Plugins.SEconomy.SEconomyPlugin.Instance.WorldAccount, commandCost,
+                    Wolfje.Plugins.SEconomy.Journal.BankAccountTransferOptions.AnnounceToSender |
+                    Wolfje.Plugins.SEconomy.Journal.BankAccountTransferOptions.IsPayment, "", string.Format("charge to {0}", player.TSPlayer.Name));
+
                     var newchannel = new Channel(chID, args.Parameters[0]);
                     if (args.Parameters.Count > 1)
                         newchannel.Password = args.Parameters[1];
@@ -207,11 +238,12 @@ namespace ChatAssistant
                     Channels[chID].JoinChannel(player);
                 }
                 else
-                    args.Player.SendMessage(String.Format("Channel not found and insufficient founds to create a new channel. (costs: {0})", Vault.Vault.MoneyToString(config.ChanelCreatingCost)), Color.LightSalmon);
+                    args.Player.SendMessage(String.Format("Channel not found and insufficient founds to create a new channel. (costs: {0})", economyPlayer.Balance.ToString()), Color.LightSalmon);
+                                                                                                                                             //Vault.Vault.MoneyToString(this.parseCost))
             }
             catch (Exception ex)
             {
-                Log.ConsoleError(ex.ToString());
+                TShock.Log.ConsoleError(ex.ToString());
             }
         }
         void ChannelCommand(CommandArgs args)
@@ -249,7 +281,7 @@ namespace ChatAssistant
                     }
                     if (j != -1) // channel not found
                     {
-                        if (config.UsingVault)
+                        if (config.UsingSeconomy)
                         {
                             try
                             {
@@ -257,7 +289,7 @@ namespace ChatAssistant
                             }
                             catch
                             {
-                                config.UsingVault = false;
+                                config.UsingSeconomy = false;
                             }
                             return;
                         }
@@ -281,7 +313,7 @@ namespace ChatAssistant
             }
             catch (Exception ex)
             {
-                Log.ConsoleError(ex.ToString());
+                TShock.Log.ConsoleError(ex.ToString());
             }
         }
         void IgnoreCommand(CommandArgs args)
@@ -318,25 +350,26 @@ namespace ChatAssistant
             }
             catch (Exception ex)
             {
-                Log.ConsoleError(ex.ToString());
+                TShock.Log.ConsoleError(ex.ToString());
             }
         }
-        void OnChat(messageBuffer buf, int who, string text, HandledEventArgs args)
+        void OnChat(ServerChatEventArgs args)
         {
-            if (text[0] == '/')
-                return;
-            var player = PlayerList[who];
+
+      //      if (args.Parameters[0]) // OLD code was text = ///// FIX ME SOME ONE
+      //         return;
+            var player = PlayerList[args.Who];
             if (player != null)
             {
                 if (player.InMenu)
                 {
                     if (player.Menu.contents[player.Menu.index].Writable)
-                        player.Menu.OnInput(text);
+   //                     player.Menu.OnInput(args.Parameters[0]);
                     args.Handled = true;
                 }
                 else if (!player.TSPlayer.mute && !TShock.Config.EnableChatAboveHeads)
                 {
-                    NetMessage.SendData((int)PacketTypes.ChatText, -1, who, String.Format(TShock.Config.ChatFormat, player.TSPlayer.Group.Name, player.TSPlayer.Group.Prefix, player.TSPlayer.Name, player.TSPlayer.Group.Suffix, text), 255, player.TSPlayer.Group.R, player.TSPlayer.Group.G, player.TSPlayer.Group.B, player.Channel + 2);
+   //                 NetMessage.SendData((int)PacketTypes.ChatText, -1, TSPlayer.Server.User.ID, String.Format(TShock.Config.ChatFormat, player.TSPlayer.Group.Name, player.TSPlayer.Group.Prefix, player.TSPlayer.Name, player.TSPlayer.Group.Suffix, args.Parameters[0]), 255, player.TSPlayer.Group.R, player.TSPlayer.Group.G, player.TSPlayer.Group.B, player.Channel + 2);
                     args.Handled = true;
                 }
             }
@@ -395,7 +428,7 @@ namespace ChatAssistant
                     }
                 }
             }
-            catch (Exception ex) { Log.ConsoleError(ex.ToString()); }
+            catch (Exception ex) { TShock.Log.ConsoleError(ex.ToString()); }
         }
         public static void SendData(SendDataEventArgs e)
         {
@@ -403,7 +436,7 @@ namespace ChatAssistant
                 return;
             try
             {
-                if (e.MsgID == PacketTypes.ChatText)
+                if (e.MsgId == PacketTypes.ChatText)
                 {
                  //   Log.ConsoleInfo(String.Format("ChatText> 1: {0}, 2: {4}, 3: {5}, 4: {6}, 5: {1}, remote: {2}, ignore: {3}", e.number, e.number5, e.remoteClient, e.ignoreClient, e.number2, e.number3, e.number4));
                     int sender = e.ignoreClient; // -1 = system
@@ -471,7 +504,7 @@ namespace ChatAssistant
 
                             String logMessage = String.Format("[Chat][{1}]{2} {0}", e.text, msgType.ToString(), (msgType == MsgType.Channel && Channels[channel] != null) ? String.Format("[{0}]", Channels[channel].Name) : "");
                             Console.WriteLine(logMessage);
-                            Log.Data(logMessage);
+                            TShock.Log.Data(logMessage);
                         }
                         e.Handled = true;
                     }
@@ -498,7 +531,7 @@ namespace ChatAssistant
                         }
                     }                                        
                 }
-                else if (e.MsgID == PacketTypes.PlayerInfo)
+                else if (e.MsgId == PacketTypes.PlayerInfo)
                 {
                    //  Console.WriteLine(String.Format("PlayerInfo> 1: {0}, 2: {4}, 3: {5}, 4: {6}, 5: {1}, remote: {2}, ignore: {3} text: {7}", e.number, e.number5, e.remoteClient, e.ignoreClient, e.number2, e.number3, e.number4, e.text));
                     if (TShock.Config.EnableChatAboveHeads && e.number5 == 0) //default message
@@ -512,7 +545,7 @@ namespace ChatAssistant
                     }
                 }
             }
-            catch (Exception ex) { Log.ConsoleError(ex.ToString()); }
+            catch (Exception ex) { TShock.Log.ConsoleError(ex.ToString()); }
         }
         private static void AddLogItem(ChatMessage msg)
         {
@@ -566,7 +599,7 @@ namespace ChatAssistant
                             return true;
                     }                    
                 }
-                catch (Exception ex) { Log.ConsoleError(ex.ToString()); }
+                catch (Exception ex) { TShock.Log.ConsoleError(ex.ToString()); }
             }
             return false;
         }
@@ -583,6 +616,7 @@ namespace ChatAssistant
             }
             return "";
         }
+
     }   
 
 }
