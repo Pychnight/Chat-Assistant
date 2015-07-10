@@ -353,23 +353,23 @@ namespace ChatAssistant
                 TShock.Log.ConsoleError(ex.ToString());
             }
         }
-        void OnChat(ServerChatEventArgs args)
+        void OnChat(ServerChatEventArgs e)
         {
-            if (args.Text.StartsWith("/"))
+            if (e.Text.StartsWith("/"))
                 return;
-            var player = PlayerList[args.Who];
+            var player = PlayerList[e.Who];
             if (player != null)
             {
                 if (player.InMenu)
                 {
                     if (player.Menu.contents[player.Menu.index].Writable)
-                    player.Menu.OnInput(args.Text);
-                    args.Handled = true;
+                    player.Menu.OnInput(e.Text);
+                    e.Handled = true;
                 }
                 else if (!player.TSPlayer.mute && !TShock.Config.EnableChatAboveHeads)
                 {
-                    NetMessage.SendData((int)PacketTypes.ChatText, -1, args.Who, String.Format(TShock.Config.ChatFormat, player.TSPlayer.Group.Name, player.TSPlayer.Group.Prefix, player.TSPlayer.Name, player.TSPlayer.Group.Suffix, args.Text, 255, player.TSPlayer.Group.R, player.TSPlayer.Group.G, player.TSPlayer.Group.B, player.Channel + 2));
-                    args.Handled = true;
+                    NetMessage.SendData((int)PacketTypes.ChatText, -1, e.Who, String.Format(TShock.Config.ChatFormat, player.TSPlayer.Group.Name, player.TSPlayer.Group.Prefix, player.TSPlayer.Name, player.TSPlayer.Group.Suffix, e.Text, 255, player.TSPlayer.Group.R, player.TSPlayer.Group.G, player.TSPlayer.Group.B, player.Channel + 2));
+                    e.Handled = true;
                 }
             }
         }
