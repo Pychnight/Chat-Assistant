@@ -355,21 +355,20 @@ namespace ChatAssistant
         }
         void OnChat(ServerChatEventArgs args)
         {
-
-      //      if (args.Parameters[0]) // OLD code was text = ///// FIX ME SOME ONE
-      //         return;
+            if (args.Text.StartsWith("/"))
+                return;
             var player = PlayerList[args.Who];
             if (player != null)
             {
                 if (player.InMenu)
                 {
                     if (player.Menu.contents[player.Menu.index].Writable)
-   //                     player.Menu.OnInput(args.Parameters[0]);
+                    player.Menu.OnInput(args.Text);
                     args.Handled = true;
                 }
                 else if (!player.TSPlayer.mute && !TShock.Config.EnableChatAboveHeads)
                 {
-   //                 NetMessage.SendData((int)PacketTypes.ChatText, -1, TSPlayer.Server.User.ID, String.Format(TShock.Config.ChatFormat, player.TSPlayer.Group.Name, player.TSPlayer.Group.Prefix, player.TSPlayer.Name, player.TSPlayer.Group.Suffix, args.Parameters[0]), 255, player.TSPlayer.Group.R, player.TSPlayer.Group.G, player.TSPlayer.Group.B, player.Channel + 2);
+                    NetMessage.SendData((int)PacketTypes.ChatText, -1, TSPlayer.Server.User.ID, String.Format(TShock.Config.ChatFormat, player.TSPlayer.Group.Name, player.TSPlayer.Group.Prefix, player.TSPlayer.Name, player.TSPlayer.Group.Suffix, args.Text, 255, player.TSPlayer.Group.R, player.TSPlayer.Group.G, player.TSPlayer.Group.B, player.Channel + 2));
                     args.Handled = true;
                 }
             }
